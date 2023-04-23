@@ -1,0 +1,189 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  CreatePdfServerless
+
+Globals: # https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-specification-template-anatomy-globals.html
+  Api:
+    EndpointConfiguration: REGIONAL
+    TracingEnabled: true
+    Cors: # https://awslabs.github.io/aws-lambda-powertools-python/latest/core/event_handler/api_gateway/#cors
+      # AllowOrigin: "'https://example.com'"
+      AllowOrigin: "'*'"  # Dev only
+      AllowHeaders: "'Content-Type,Authorization,X-Amz-Date'"
+      MaxAge: "'300'"
+    BinaryMediaTypes: # https://awslabs.github.io/aws-lambda-powertools-python/latest/core/event_handler/api_gateway/#binary-responses
+      - '*~1*'  # converts to */* for any binary type
+  Function:
+    Timeout: 5
+    MemorySize: 256
+    Runtime: python3.9
+    Tracing: Active # https://docs.aws.amazon.com/lambda/latest/dg/lambda-x-ray.html
+
+Resources:
+
+  EndpointFct:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.lambda_handler
+      CodeUri: endpoint_api
+      FunctionName: "IppDejPdf-EndpointFunction"
+      Description: Lambda for IppDejPdf
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:017000801446:layer:AWSLambdaPowertoolsPython:9
+      Events:
+        RequestPdf:
+          Type: Api
+          Properties:
+            Path: /request-pdf/{sport}/{sportsman}
+            Method: POST
+        GetPresignedPdf:
+          Type: Api
+          Properties:
+            Path: /pdf/{uuid}
+            Method: GET
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: "Allow"
+              Action: "sqs:SendMessage"
+              Resource: !GetAtt AsyncExportQueue.Arn
+            - Effect: "Allow"
+              Action:
+                - "s3:GetObject"
+                - "s3:ListBucket"
+              Resource:
+                - !GetAtt ExportBucket.Arn
+                - !Sub "${ExportBucket.Arn}/*"
+            - Effect: "Allow"
+              Action:
+                - "dynamodb:Query"
+              Resource:
+                - !GetAtt DataTable.Arn
+      Environment:
+        Variables:
+          URL_SQS_QUEUE: !Ref AsyncExportQueue
+          TABLE_NAME_DATA: !Ref DataTable
+          BUCKET_NAME: !Ref ExportBucket
+          LOG_LEVEL: INFO
+          POWERTOOLS_LOGGER_SAMPLE_RATE: 0.1
+          POWERTOOLS_LOGGER_LOG_EVENT: true
+          POWERTOOLS_METRICS_NAMESPACE: IppDejPdf
+          POWERTOOLS_SERVICE_NAME: App
+
+  GenerateDataFct:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.lambda_handler
+      CodeUri: generate_data
+      FunctionName: "IppDejPdf-GenerateData"
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:017000801446:layer:AWSLambdaPowertoolsPython:9
+      Events:
+        GenerateData:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt AsyncExportQueue.Arn
+            BatchSize: 2
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: "Allow"
+              Action:
+                - "dynamodb:GetItem"
+              Resource:
+                - !GetAtt DataTable.Arn
+            - Effect: "Allow"
+              Action: "sqs:SendMessage"
+              Resource: !GetAtt CreatePdfQueue.Arn
+      Environment:
+        Variables:
+          URL_SQS_QUEUE: !Ref CreatePdfQueue
+          TABLE_NAME_DATA: !Ref DataTable
+          LOG_LEVEL: INFO
+          POWERTOOLS_LOGGER_SAMPLE_RATE: 0.1
+          POWERTOOLS_LOGGER_LOG_EVENT: true
+          POWERTOOLS_METRICS_NAMESPACE: IppDejPdf
+          POWERTOOLS_SERVICE_NAME: App
+
+  GeneratePdfFct:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.handler
+      CodeUri: generate_pdf
+      FunctionName: "IppDejPdf-GeneratePdfFct"
+      Runtime: nodejs16.x
+      Timeout: 60
+      Events:
+        GeneratePdf:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt CreatePdfQueue.Arn
+      Layers:
+        - "arn:aws:lambda:eu-west-1:764866452798:layer:chrome-aws-lambda:31"
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: "Allow"
+              Action:
+                - "s3:PutObject"
+              Resource:
+                - !GetAtt ExportBucket.Arn
+                - !Sub "${ExportBucket.Arn}/*"
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref ExportBucket
+
+  AsyncExportQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: "IppDejPdfAsyncExport"
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt DLQueue.Arn
+        maxReceiveCount: 3
+
+  CreatePdfQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: "IppDejPdfCreatePdf"
+      VisibilityTimeout: 60
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt DLQueue.Arn
+        maxReceiveCount: 3
+
+  DLQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: "IppDejPdfDLQ"
+
+  ExportBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: "ippdejpdf-export"
+
+  DataTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: "sport"
+          AttributeType: "S"
+        - AttributeName: "sportsman"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "sport"
+          KeyType: "HASH"
+        - AttributeName: "sportsman"
+          KeyType: "RANGE"
+      TableName: "IppDejPdfDataTable"
+
+
+Outputs:
+  RequestPdfApigwURL:
+    Description: "API Gateway endpoint URL for post RequestPdf"
+    Value: !Sub "curl -X POST https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/request-pdf/{sport}/{sportsman}"
+
+  GetPdfApigwURL:
+    Description: "API Gateway endpoint URL for get pdf"
+    Value: !Sub "curl https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/pdf/{uuid}"
+

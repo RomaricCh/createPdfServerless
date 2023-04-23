@@ -1,0 +1,195 @@
+mixin write_script_js()
+  script.
+    const add_charts = (div_taget, data, title) => {
+      // Create root element
+      // https://www.amcharts.com/docs/v5/getting-started/#Root_element
+      // var root = am5.Root.new(div_taget);
+      var root = am5.Root.new(div_taget);
+
+
+      // Set themes
+      // https://www.amcharts.com/docs/v5/concepts/themes/
+      root.setThemes([
+        am5themes_Animated.new(root),
+        am5themes_Frozen.new(root)
+      ]);
+
+      // Create chart
+      // https://www.amcharts.com/docs/v5/charts/percent-charts/pie-chart/
+      var chart = root.container.children.push(am5percent.PieChart.new(root, {
+        layout: root.verticalLayout,
+        innerRadius: am5.percent(50)
+      }));
+
+      // Create label
+      chart.children.unshift(am5.Label.new(root, {
+        text: title,
+        fontSize: 18,
+        fontWeight: "500",
+        textAlign: "center",
+        x: am5.percent(50),
+        centerX: am5.percent(50),
+        paddingTop: 0,
+        paddingBottom: 20
+      }));
+
+      // Create series
+      // https://www.amcharts.com/docs/v5/charts/percent-charts/pie-chart/#Series
+      var series = chart.series.push(am5percent.PieSeries.new(root, {
+        valueField: "value",
+        categoryField: "category",
+        alignLabels: false,
+        legendLabelText: "{category}:"
+      }));
+
+      series.labels.template.setAll({
+        textType: "circular",
+        text: "{value}",
+        centerX: 0,
+        centerY: 0
+      });
+
+
+      // Set data
+      // https://www.amcharts.com/docs/v5/charts/percent-charts/pie-chart/#Setting_data
+      series.data.setAll(data);
+
+
+      // Create legend
+      // https://www.amcharts.com/docs/v5/charts/percent-charts/legend-percent-series/
+      var legend = chart.children.push(am5.Legend.new(root, {
+        centerX: am5.percent(50),
+        x: am5.percent(50),
+        marginTop: 15,
+        marginBottom: 15,
+      }));
+
+      legend.data.setAll(series.dataItems);
+    }
+
+    am5.ready(function () {
+
+      let data_victory = [
+        { value: #{total_first_pos_moto3}, category: "moto3/125cc" },
+        { value: #{total_first_pos_moto2}, category: "moto2" },
+        { value: #{total_first_pos_motogp}, category: "motoGP" }
+      ]
+      add_charts(chart_victory, data_victory, "Victoires: #{total_first_pos}")
+
+      let data_second_place = [
+        { value: #{total_second_pos_moto3}, category: "moto3/125cc" },
+        { value: #{total_second_pos_moto2}, category: "moto2" },
+        { value: #{total_second_pos_motogp}, category: "motoGP" }
+      ]
+      add_charts(chart_second, data_second_place, "Secondes places: #{total_second_pos}")
+
+      let data_third_place = [
+        { value: #{total_third_pos_moto3}, category: "moto3/125cc" },
+        { value: #{total_third_pos_moto2}, category: "moto2" },
+        { value: #{total_third_pos_motogp}, category: "motoGP" }
+      ]
+      add_charts(chart_third, data_third_place, "Troisièmes places: #{total_third_pos}")
+    }); // end am5.ready()
+
+doctype html
+html(lang='en')
+  head
+    meta(charset='UTF-8')
+    title PDF Generator
+    style. 
+      body {
+        color: black;
+        font-family: sans-serif;
+      }
+      .title_rider {
+        margin-top: 20px;
+        margin-bottom: 20px;
+        width: 100%;
+        text-align: center;
+      }
+      #chart_victory, #chart_second, #chart_third {
+        width: 25%;
+        height: 300px;
+      }
+      .flex-container {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      table,
+      tr,
+      td,
+      th {
+        border-collapse: collapse;
+        font-weight: normal;
+        background-color: #b3b6d7;
+      }
+      th, td.focus {
+        background-color: #2b2ea7;
+        color: #c6c1c1;
+      }
+      tr, th {
+        border: 1px solid black;
+      }
+      #container_table {
+        margin-top: 20px;
+        width: 95%;
+      }
+      .table_stat {
+        width: 96%;
+        margin: auto;
+        text-align: center;
+      }
+      .border {
+        background-color: rgb(226 226 226);
+        border: 2px solid #414144;
+        margin-left: 20px;
+        border-radius: 20px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+      }
+      #main_container {
+        width: 900px;
+      }
+    <script src="https://cdn.amcharts.com/lib/5/index.js"></script>
+    <script src="https://cdn.amcharts.com/lib/5/percent.js"></script>
+    <script src="https://cdn.amcharts.com/lib/5/themes/Animated.js"></script> 
+    <script src="https://cdn.amcharts.com/lib/5/themes/Frozen.js"></script> 
+  body
+    div#main_container
+      div.title_rider
+        h1 #{sportsman}
+      div.flex-container
+        div#chart_victory.border
+        div#chart_second.border
+        div#chart_third.border
+
+      div#container_table.border
+        table.table_stat
+          tr
+            th Saison
+            th Catégorie
+            th Moto
+            th Départs
+            th Poles
+            th 1e Position
+            th 2e Position
+            th 3e Position
+            th Podiums
+            th Points
+            th Position
+          each stat in stats
+            tr
+              td #{stat.season}
+              td #{stat.category}
+              td #{stat.bike}
+              td.focus #{stat.starts}
+              td.focus #{stat.poles}
+              td #{stat.first_position}
+              td #{stat.second_position}
+              td #{stat.third_position}
+              td.focus #{stat.podiums}
+              td #{stat.points}
+              td #{stat.position}
+
+    +write_script_js()

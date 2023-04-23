@@ -1,0 +1,19 @@
+{
+  "name": "generate_pdf",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "pug": "^3.0.2"
+  },
+  "devDependencies": {
+    "@sparticuz/chrome-aws-lambda": "^14.3.0",
+    "@types/node": "^17.0.23",
+    "aws-sdk": "^2.1101.0"
+  }
+}
